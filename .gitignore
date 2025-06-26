@@ -26,3 +26,7 @@ IDEWorkspaceChecks.plist
 .vscode/
 .packages
 .idea/
+
+# OpenCode
+
+.openCode/

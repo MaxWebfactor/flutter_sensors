@@ -6,52 +6,25 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.*
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 
-
-class FlutterSensorsPlugin() : FlutterPlugin, MethodCallHandler {
+class FlutterSensorsPlugin : FlutterPlugin, MethodCallHandler {
     private var eventChannels = hashMapOf<Int, EventChannel>()
     private var streamHandlers = hashMapOf<Int, SensorStreamHandler>()
     private lateinit var context: Context
     private lateinit var messenger: BinaryMessenger
     private lateinit var sensorManager: SensorManager
-
-    constructor(context: Context, binaryMessenger: BinaryMessenger) : this() {
-        this.context = context
-        this.messenger = binaryMessenger
-        this.sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    }
+    private lateinit var methodChannel: MethodChannel
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        val methodChannel = MethodChannel(binding.binaryMessenger, CHANNEL_NAME)
-        this.context = binding.applicationContext
-        this.messenger = binding.binaryMessenger
-        this.sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        context = binding.applicationContext
+        messenger = binding.binaryMessenger
+        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        methodChannel = MethodChannel(messenger, CHANNEL_NAME)
         methodChannel.setMethodCallHandler(this)
     }
 
-    companion object {
-        private const val CHANNEL_NAME = "flutter_sensors"
-
-        @Suppress("deprecation")
-        @JvmStatic
-        fun registerWith(registrar: PluginRegistry.Registrar) {
-            val methodChannel = MethodChannel(registrar.messenger(), CHANNEL_NAME)
-            val context = registrar.context()
-            val binaryMessenger = registrar.messenger()
-            val plugin = FlutterSensorsPlugin(context, binaryMessenger)
-            methodChannel.setMethodCallHandler(plugin)
-            registrar.addViewDestroyListener {
-                plugin.onDestroy()
-                false
-            }
-        }
-    }
-
-    override fun onDetachedFromEngine(p0: FlutterPlugin.FlutterPluginBinding) {
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         removeAllListeners()
-    }
-
-    private fun onDestroy() {
-        removeAllListeners()
+        methodChannel.setMethodCallHandler(null)
     }
 
     private fun removeAllListeners() {
@@ -61,6 +34,7 @@ class FlutterSensorsPlugin() : FlutterPlugin, MethodCallHandler {
             streamHandlers.remove(it.key)
             it.value.setStreamHandler(null)
         }
+        eventChannels.clear()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -77,7 +51,6 @@ class FlutterSensorsPlugin() : FlutterPlugin, MethodCallHandler {
         val sensorId: Int = dataMap["sensorId"] as Int
         val isAvailable = sensorManager.getSensorList(sensorId).isNotEmpty()
         result.success(isAvailable)
-        return
     }
 
     private fun updateSensorInterval(arguments: Any, result: MethodChannel.Result) {
@@ -100,8 +73,6 @@ class FlutterSensorsPlugin() : FlutterPlugin, MethodCallHandler {
             val interval: Int? = dataMap["interval"] as Int?
             if (!eventChannels.containsKey(sensorId)) {
                 val eventChannel = EventChannel(messenger, "flutter_sensors/$sensorId")
-                val sensorManager =
-                    context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
                 val sensorStreamHandler = SensorStreamHandler(sensorManager, sensorId, interval)
                 eventChannel.setStreamHandler(sensorStreamHandler)
                 eventChannels[sensorId] = eventChannel
@@ -112,5 +83,9 @@ class FlutterSensorsPlugin() : FlutterPlugin, MethodCallHandler {
             e.printStackTrace()
             result.success(false)
         }
+    }
+
+    companion object {
+        private const val CHANNEL_NAME = "flutter_sensors"
     }
 }
